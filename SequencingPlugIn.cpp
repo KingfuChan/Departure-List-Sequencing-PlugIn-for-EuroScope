@@ -5,7 +5,7 @@
 #define PLUGIN_NAME "Departure List Sequencing"
 #define PLUGIN_VERSION "0.9.0"
 #define PLUGIN_AUTHOR "Kingfu Chan"
-#define PLUGIN_COPYRIGHT "Still under development"
+#define PLUGIN_COPYRIGHT "VATPRC CID:1352605 Programing for fun:)"
 
 
 // TAG ITEM TYPE
@@ -95,6 +95,7 @@ bool CSequencingPlugIn::IsCallsignOnline(const char* callsign) {
 	return false;
 }
 
+
 void CSequencingPlugIn::OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarTarget,
 	int ItemCode, int TagData, char sItemString[16],
 	int* pColorCode, COLORREF* pRGB, double* pFontSize)
@@ -128,6 +129,7 @@ void CSequencingPlugIn::OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarT
 		}
 	}
 }
+
 
 void CSequencingPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, POINT Pt, RECT Area) {
 	EuroScopePlugIn::CFlightPlan fp;
@@ -166,7 +168,7 @@ void CSequencingPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, 
 	case TAG_FUNC_SEQ_START:
 	{
 		SequenceData seqstart = {
-			(char*)fp.GetCallsign(),
+			fp.GetCallsign(),
 			GroundStatus::STBY_CLEARANCE,
 			true };
 		m_SequenceArray.Add(seqstart);
@@ -236,6 +238,7 @@ void CSequencingPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, 
 	}
 }
 
+
 bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 	if (strncmp(sCommandLine, ".dls", 4) || strlen(sCommandLine) < 6) // undefined
 		return false;
@@ -245,8 +248,8 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 
 	if (cmd == "REMOVE ALL") {
 		m_SequenceArray.RemoveAll();
-		DisplayUserMessage("DLS PlugIn", "", "All sequence removed!",
-			false, true, true, true, true);
+		DisplayUserMessage("Message", "DLS Plugin", "All sequence removed!",
+			false, true, true, false, false);
 		return true;
 	}
 
@@ -255,13 +258,14 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 		for (idx = 0; idx < m_SequenceArray.GetCount(); idx++)
 			if (!IsCallsignOnline(m_SequenceArray[idx].m_callsign))
 				m_SequenceArray.RemoveAt(idx);
-		DisplayUserMessage("DLS PlugIn", "", "All offline sequence removed!",
-			false, true, true, true, true);
+		DisplayUserMessage("Message", "DLS Plugin", "All offline sequence removed!",
+			false, true, true, false, false);
 		return true;
 	}
 
 	return false;
 }
+
 
 void CSequencingPlugIn::OnTimer(int Counter) {
 	// update active information for all aircrafts

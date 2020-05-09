@@ -7,7 +7,7 @@
 
 
 struct SequenceData {
-	char* m_callsign;
+	CString m_callsign;
 	int m_status;
 	bool m_active;
 };
