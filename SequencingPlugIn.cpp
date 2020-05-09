@@ -24,6 +24,10 @@ const int TAG_FUNC_SEQ_DELETE = 16; // delete from database
 // arrray indexes, see .h file SequencePosition
 const int M_ARRAY_NOMATCH = -1;
 
+// colors
+const COLORREF TAG_COLOR_GREY = 0x009B9B9B;
+const COLORREF TAG_COLOR_BLUE = 0x00E2E481;
+
 // tag texts
 const char DASHES[] = "-------"; // place-holder
 const char STATUS_DESCRIPTION[3][5] = { "CLRN","PUST","TKOF" };
@@ -104,14 +108,24 @@ void CSequencingPlugIn::OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarT
 		seqpos = GetSequenceData(FlightPlan.GetCallsign());
 		if (seqpos.m_index == M_ARRAY_NOMATCH) {
 			strcpy_s(sItemString, strlen(DASHES) + 1, DASHES);
+			*pColorCode = TAG_COLOR_RGB_DEFINED;
+			*pRGB = TAG_COLOR_GREY;
 			return;
 		}
 
 		int seq;
 		seq = m_SequenceArray[seqpos.m_index].m_status % 2 ? seqpos.m_sequence : 0;
 
-		sprintf_s(sItemString, strlen(DASHES) + 1, "%s-%.2d",
-			STATUS_DESCRIPTION[(m_SequenceArray[seqpos.m_index].m_status - 1) / 2], seq);
+		if (seq) { // stby
+			sprintf_s(sItemString, strlen(DASHES) + 1, "%s-%.2d",
+				STATUS_DESCRIPTION[(m_SequenceArray[seqpos.m_index].m_status - 1) / 2], seq);
+		}
+		else { // clrd
+			sprintf_s(sItemString, strlen(DASHES) + 1, "%s---",
+				STATUS_DESCRIPTION[(m_SequenceArray[seqpos.m_index].m_status - 1) / 2]);
+			*pColorCode = TAG_COLOR_RGB_DEFINED;
+			*pRGB = TAG_COLOR_BLUE;
+		}
 	}
 }
 
