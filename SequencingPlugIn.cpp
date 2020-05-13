@@ -3,7 +3,7 @@
 
 
 #define PLUGIN_NAME "Departure List Sequencing"
-#define PLUGIN_VERSION "0.9.0"
+#define PLUGIN_VERSION "0.9.1"
 #define PLUGIN_AUTHOR "Kingfu Chan"
 #define PLUGIN_COPYRIGHT "VATPRC CID:1352605 Programing for fun:)"
 
@@ -55,7 +55,7 @@ CSequencingPlugIn::CSequencingPlugIn(void)
 
 	//tag related
 	RegisterTagItemType("Ground Sequence", TAG_ITEM_TYPE_SEQ_STATUS);
-	RegisterTagItemFunction("Popup Menu", TAG_FUNC_SEQ_POPUP);
+	RegisterTagItemFunction("GND SEQ Popup List", TAG_FUNC_SEQ_POPUP);
 
 	m_SequenceArray.RemoveAll();
 }
@@ -240,11 +240,13 @@ void CSequencingPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, 
 
 
 bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
-	if (strncmp(sCommandLine, ".dls", 4) || strlen(sCommandLine) < 6) // undefined
+	CString cmd = sCommandLine;
+	cmd.Trim();
+	cmd.MakeUpper();
+	if (cmd.Left(4) == ".DLS " || cmd.GetLength() < 5) // undefined
 		return false;
 
-	CString cmd = sCommandLine + 5;
-	cmd.MakeUpper();
+	cmd = cmd.Mid(5);
 
 	if (cmd == "REMOVE ALL") {
 		m_SequenceArray.RemoveAll();
@@ -279,7 +281,7 @@ void CSequencingPlugIn::OnTimer(int Counter) {
 		online = IsCallsignOnline(m_SequenceArray[idx].m_callsign);
 		m_SequenceArray[idx].m_active = online;
 		if (!online) { // avoid potential errors
-			TRACE("%s\tdeactivate\n", m_SequenceArray[idx].m_callsign);
+			TRACE("%s\tinactive\n", m_SequenceArray[idx].m_callsign);
 			continue;
 		}
 		rt = RadarTargetSelect(m_SequenceArray[idx].m_callsign);
