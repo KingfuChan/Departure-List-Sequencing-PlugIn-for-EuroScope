@@ -5,7 +5,7 @@
 #define PLUGIN_NAME "Departure List Sequencing"
 #define PLUGIN_VERSION "0.9.1"
 #define PLUGIN_AUTHOR "Kingfu Chan"
-#define PLUGIN_COPYRIGHT "VATPRC CID:1352605 Programing for fun:)"
+#define PLUGIN_COPYRIGHT "Copyright (C) 2020, Kingfu Chan"
 
 
 // TAG ITEM TYPE
@@ -21,15 +21,19 @@ const int TAG_FUNC_SEQ_PREV = 14; // previous status
 const int TAG_FUNC_SEQ_EDIT_FINISH = 15; // finish edit popup
 const int TAG_FUNC_SEQ_DELETE = 16; // delete from database
 
+const int TAG_TOP_SPEED = 80; // maximum speed before delete from memory
+
 // arrray indexes, see .h file SequencePosition
 const int M_ARRAY_NOMATCH = -1;
 
 // colors
 const COLORREF TAG_COLOR_GREY = 0x009B9B9B;
 const COLORREF TAG_COLOR_BLUE = 0x00E2E481;
+const char* SETTINGS_COLOR_INACTIVE = "ColorInac";
+const char* SETTINGS_COLOR_CLEARED = "ColorClrd";
 
 // tag texts
-const char DASHES[] = "-------"; // place-holder
+const char PLACE_HOLDER[] = "-------"; // place-holder
 const char STATUS_DESCRIPTION[3][5] = { "CLRN","PUST","TKOF" };
 
 namespace GroundStatus { // note that even numbers are clrd
@@ -42,6 +46,7 @@ namespace GroundStatus { // note that even numbers are clrd
 };
 
 using namespace EuroScopePlugIn;
+
 
 CSequencingPlugIn::CSequencingPlugIn(void)
 	: CPlugIn(EuroScopePlugIn::COMPATIBILITY_CODE,
@@ -58,6 +63,11 @@ CSequencingPlugIn::CSequencingPlugIn(void)
 	RegisterTagItemFunction("GND SEQ Popup List", TAG_FUNC_SEQ_POPUP);
 
 	m_SequenceArray.RemoveAll();
+
+	CustomColorInac = TAG_COLOR_GREY;
+	CustomColorClrd = TAG_COLOR_BLUE;
+	ParseColorFromText(GetDataFromSettings(SETTINGS_COLOR_INACTIVE), CustomColorInac);
+	ParseColorFromText(GetDataFromSettings(SETTINGS_COLOR_CLEARED), CustomColorClrd);
 }
 
 
@@ -96,6 +106,30 @@ bool CSequencingPlugIn::IsCallsignOnline(const char* callsign) {
 }
 
 
+bool CSequencingPlugIn::ParseColorFromText(const char* text, COLORREF& color) {
+	if (text == nullptr)
+		return false;
+
+	int r, g, b;
+	if (sscanf_s(text, "%d,%d,%d", &r, &g, &b) == 3)
+		if (r >= 0 && r <= 255 &&
+			g >= 0 && r <= 255 &&
+			b >= 0 && b <= 255) { // valid color value
+			color = RGB(r, g, b);
+			return true;
+		}
+	return false;
+}
+
+
+void CSequencingPlugIn::DisplayMessage(const char* msg) {
+	// unified display method with fixed parameters
+	DisplayUserMessage("Message", "DLS Plugin",
+		msg,
+		false, true, true, false, false);
+}
+
+
 void CSequencingPlugIn::OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarTarget,
 	int ItemCode, int TagData, char sItemString[16],
 	int* pColorCode, COLORREF* pRGB, double* pFontSize)
@@ -108,9 +142,9 @@ void CSequencingPlugIn::OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarT
 
 		seqpos = GetSequenceData(FlightPlan.GetCallsign());
 		if (seqpos.m_index == M_ARRAY_NOMATCH) {
-			strcpy_s(sItemString, strlen(DASHES) + 1, DASHES);
+			strcpy_s(sItemString, strlen(PLACE_HOLDER) + 1, PLACE_HOLDER);
 			*pColorCode = TAG_COLOR_RGB_DEFINED;
-			*pRGB = TAG_COLOR_GREY;
+			*pRGB = CustomColorInac;
 			return;
 		}
 
@@ -118,14 +152,14 @@ void CSequencingPlugIn::OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarT
 		seq = m_SequenceArray[seqpos.m_index].m_status % 2 ? seqpos.m_sequence : 0;
 
 		if (seq) { // stby
-			sprintf_s(sItemString, strlen(DASHES) + 1, "%s-%.2d",
+			sprintf_s(sItemString, strlen(PLACE_HOLDER) + 1, "%s-%.2d",
 				STATUS_DESCRIPTION[(m_SequenceArray[seqpos.m_index].m_status - 1) / 2], seq);
 		}
 		else { // clrd
-			sprintf_s(sItemString, strlen(DASHES) + 1, "%s---",
+			sprintf_s(sItemString, strlen(PLACE_HOLDER) + 1, "%s---",
 				STATUS_DESCRIPTION[(m_SequenceArray[seqpos.m_index].m_status - 1) / 2]);
 			*pColorCode = TAG_COLOR_RGB_DEFINED;
-			*pRGB = TAG_COLOR_BLUE;
+			*pRGB = CustomColorClrd;
 		}
 	}
 }
@@ -156,12 +190,20 @@ void CSequencingPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, 
 		if (seqpos.m_index == M_ARRAY_NOMATCH)
 			AddPopupListElement("Start", "SEQ", TAG_FUNC_SEQ_START);
 		else {
-			AddPopupListElement("Next", "STS", TAG_FUNC_SEQ_NEXT);
-			AddPopupListElement("Prev", "STS", TAG_FUNC_SEQ_PREV);
-			if (m_SequenceArray[seqpos.m_index].m_status % 2) // stby status
+
+			// little bit tricky :D
+			int sts = m_SequenceArray[seqpos.m_index].m_status;
+			if (sts < GroundStatus::CLRD_TAKEOFF)
+				AddPopupListElement(STATUS_DESCRIPTION[sts / 2], sts % 2 ? "clrd" : "stby", TAG_FUNC_SEQ_NEXT);
+
+			if (sts > GroundStatus::STBY_CLEARANCE)
+				AddPopupListElement(STATUS_DESCRIPTION[sts / 2 - 1], sts % 2 ? "clrd" : "stby", TAG_FUNC_SEQ_PREV);
+
+			if (sts % 2) // stby status
 				AddPopupListElement("Edit", "SEQ", TAG_FUNC_SEQ_EDIT_POPUP);
+
 			AddPopupListElement("Reset", "STS", TAG_FUNC_SEQ_RESET);
-			AddPopupListElement("Delete", "", TAG_FUNC_SEQ_DELETE);
+			AddPopupListElement("Delete", "STS", TAG_FUNC_SEQ_DELETE);
 		}
 
 		break;
@@ -185,7 +227,7 @@ void CSequencingPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, 
 	case TAG_FUNC_SEQ_NEXT:
 
 		seqnew = m_SequenceArray[seqpos.m_index];
-		if (++seqnew.m_status <= GroundStatus::CLRD_TAKEOFF) {
+		if (++seqnew.m_status <= GroundStatus::CLRD_TAKEOFF) { // shouldn't be true
 			m_SequenceArray.RemoveAt(seqpos.m_index);
 			m_SequenceArray.Add(seqnew);
 		}
@@ -194,7 +236,7 @@ void CSequencingPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, 
 	case TAG_FUNC_SEQ_PREV:
 
 		seqnew = m_SequenceArray[seqpos.m_index];
-		if (--seqnew.m_status >= GroundStatus::STBY_CLEARANCE) {
+		if (--seqnew.m_status >= GroundStatus::STBY_CLEARANCE) { // shouldn't be true
 			m_SequenceArray.RemoveAt(seqpos.m_index);
 			m_SequenceArray.Add(seqnew);
 		}
@@ -250,8 +292,7 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 
 	if (cmd == "REMOVE ALL") {
 		m_SequenceArray.RemoveAll();
-		DisplayUserMessage("Message", "DLS Plugin", "All sequence removed!",
-			false, true, true, false, false);
+		DisplayMessage("All sequences have been removed!");
 		return true;
 	}
 
@@ -260,8 +301,46 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 		for (idx = 0; idx < m_SequenceArray.GetCount(); idx++)
 			if (!IsCallsignOnline(m_SequenceArray[idx].m_callsign))
 				m_SequenceArray.RemoveAt(idx);
-		DisplayUserMessage("Message", "DLS Plugin", "All offline sequence removed!",
-			false, true, true, false, false);
+		DisplayMessage("All offline sequences have been removed!");
+		return true;
+	}
+
+	// color format: rrr,ggg,bbb (no space, English comma)
+	if (cmd.Left(15) == "COLOR INACTIVE ") { // 15==strlen
+		const char* colordata = (LPCTSTR)cmd + 15;
+		bool success = ParseColorFromText(colordata, CustomColorInac);
+		if (success) {
+			SaveDataToSettings(SETTINGS_COLOR_INACTIVE, "custom color for inactive tags", colordata);
+			CString msg;
+			msg.Format("Custom color for inactive tags have been set to (%s)!", colordata);
+			DisplayMessage(msg);
+		}
+		return success;
+	}
+
+	if (cmd.Left(14) == "COLOR CLEARED ") { // 14==strlen
+		const char* colordata = (LPCTSTR)cmd + 14;
+		bool success = ParseColorFromText(colordata, CustomColorClrd);
+		if (success) {
+			SaveDataToSettings(SETTINGS_COLOR_CLEARED, "custom color for cleared tags", colordata);
+			CString msg;
+			msg.Format("Custom color for cleared tags have been set to (%s)!", colordata);
+			DisplayMessage(msg);
+		}
+		return success;
+	}
+
+	if (cmd == "COLOR RESTORE") {
+		CustomColorClrd = TAG_COLOR_BLUE;
+		CustomColorInac = TAG_COLOR_GREY;
+		CString saveinac, saveclrd;
+		saveinac.Format("%d,%d,%d",
+			GetRValue(TAG_COLOR_GREY), GetGValue(TAG_COLOR_GREY), GetBValue(TAG_COLOR_GREY));
+		saveclrd.Format("%d,%d,%d",
+			GetRValue(TAG_COLOR_BLUE), GetGValue(TAG_COLOR_BLUE), GetBValue(TAG_COLOR_BLUE));
+		SaveDataToSettings(SETTINGS_COLOR_INACTIVE, "restored color for inactive tags", saveinac);
+		SaveDataToSettings(SETTINGS_COLOR_CLEARED, "restored color for cleared tags", saveclrd);
+		DisplayMessage("Default colors for tags have been set!");
 		return true;
 	}
 
@@ -285,7 +364,7 @@ void CSequencingPlugIn::OnTimer(int Counter) {
 			continue;
 		}
 		rt = RadarTargetSelect(m_SequenceArray[idx].m_callsign);
-		if (rt.GetGS() > 60) { // criterion for taking off
+		if (rt.GetGS() > TAG_TOP_SPEED) { // criterion for taking off
 			TRACE("%s\tremoved\n", m_SequenceArray[idx].m_callsign);
 			m_SequenceArray.RemoveAt(idx);
 		}
