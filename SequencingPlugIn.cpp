@@ -3,7 +3,7 @@
 
 
 #define PLUGIN_NAME "Departure List Sequencing"
-#define PLUGIN_VERSION "0.9.1"
+#define PLUGIN_VERSION "0.9.3"
 #define PLUGIN_AUTHOR "Kingfu Chan"
 #define PLUGIN_COPYRIGHT "Copyright (C) 2020, Kingfu Chan"
 
@@ -31,6 +31,10 @@ const COLORREF TAG_COLOR_GREY = 0x009B9B9B;
 const COLORREF TAG_COLOR_BLUE = 0x00E2E481;
 const char* SETTINGS_COLOR_INACTIVE = "ColorInac";
 const char* SETTINGS_COLOR_CLEARED = "ColorClrd";
+
+// refresh interval
+const int DEFAULT_REFRESH_INTERVAL = 5;
+const char* SETTINGS_INTERVAL = "RefreshIntv";
 
 // tag texts
 const char PLACE_HOLDER[] = "-------"; // place-holder
@@ -68,11 +72,18 @@ CSequencingPlugIn::CSequencingPlugIn(void)
 	CustomColorClrd = TAG_COLOR_BLUE;
 	ParseColorFromText(GetDataFromSettings(SETTINGS_COLOR_INACTIVE), CustomColorInac);
 	ParseColorFromText(GetDataFromSettings(SETTINGS_COLOR_CLEARED), CustomColorClrd);
+
+	const char* itvchar = GetDataFromSettings(SETTINGS_INTERVAL);
+	CustomRefreshIntv = itvchar == nullptr ?
+		DEFAULT_REFRESH_INTERVAL : atoi(itvchar);
 }
 
 
 CSequencingPlugIn::~CSequencingPlugIn(void) {
 }
+
+
+// custom funcitons
 
 
 SequencePosition CSequencingPlugIn::GetSequenceData(const char* callsign) {
@@ -82,6 +93,8 @@ SequencePosition CSequencingPlugIn::GetSequenceData(const char* callsign) {
 
 	for (idx = 0; idx < m_SequenceArray.GetCount(); idx++) {
 		ary = (m_SequenceArray[idx].m_status - 1) / 2; // array index
+		if (!m_SequenceArray[idx].m_active) // double check online, avoid potential bugs on refresh
+			m_SequenceArray[idx].m_active = IsCallsignOnline(callsign);
 		if (m_SequenceArray[idx].m_active && m_SequenceArray[idx].m_status % 2) // stby status
 			++seq[ary];
 		if (!strcmp(m_SequenceArray[idx].m_callsign, callsign)) {
@@ -92,7 +105,7 @@ SequencePosition CSequencingPlugIn::GetSequenceData(const char* callsign) {
 	}
 
 	sp.m_index = M_ARRAY_NOMATCH;
-	sp.m_sequence = -1;
+	sp.m_sequence = M_ARRAY_NOMATCH;
 	return sp;
 }
 
@@ -128,6 +141,9 @@ void CSequencingPlugIn::DisplayMessage(const char* msg) {
 		msg,
 		false, true, true, false, false);
 }
+
+
+// below are inherited functions
 
 
 void CSequencingPlugIn::OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarTarget,
@@ -330,7 +346,7 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 		return success;
 	}
 
-	if (cmd == "COLOR RESTORE") {
+	if (cmd == "COLOR RESET") {
 		CustomColorClrd = TAG_COLOR_BLUE;
 		CustomColorInac = TAG_COLOR_GREY;
 		CString saveinac, saveclrd;
@@ -338,9 +354,29 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 			GetRValue(TAG_COLOR_GREY), GetGValue(TAG_COLOR_GREY), GetBValue(TAG_COLOR_GREY));
 		saveclrd.Format("%d,%d,%d",
 			GetRValue(TAG_COLOR_BLUE), GetGValue(TAG_COLOR_BLUE), GetBValue(TAG_COLOR_BLUE));
-		SaveDataToSettings(SETTINGS_COLOR_INACTIVE, "restored color for inactive tags", saveinac);
-		SaveDataToSettings(SETTINGS_COLOR_CLEARED, "restored color for cleared tags", saveclrd);
+		SaveDataToSettings(SETTINGS_COLOR_INACTIVE, "reset color for inactive tags", saveinac);
+		SaveDataToSettings(SETTINGS_COLOR_CLEARED, "reset color for cleared tags", saveclrd);
 		DisplayMessage("Default colors for tags have been set!");
+		return true;
+	}
+
+	if (cmd.Left(9) == "INTERVAL ") { // 9==strlen
+		CString itvstr = cmd.Mid(9);
+		int itv = atoi(itvstr);
+		if (itv >= 1) {
+			CustomRefreshIntv = itv;
+			SaveDataToSettings(SETTINGS_INTERVAL, "custom refresh interval", itvstr);
+			DisplayMessage("Refresh interval has been set!");
+			return true;
+		}
+	}
+
+	if (cmd == "INTERVAL RESET") {
+		CustomRefreshIntv = DEFAULT_REFRESH_INTERVAL;
+		CString itvstr;
+		itvstr.Format("%d", CustomRefreshIntv);
+		SaveDataToSettings(SETTINGS_INTERVAL, "reset refresh interval", itvstr);
+		DisplayMessage("Default refresh interval has been set!");
 		return true;
 	}
 
@@ -350,7 +386,7 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 
 void CSequencingPlugIn::OnTimer(int Counter) {
 	// update active information for all aircrafts
-	if (Counter % 5) // once every 5 seconds
+	if (Counter % CustomRefreshIntv) // once every n seconds
 		return;
 
 	CRadarTarget rt;
