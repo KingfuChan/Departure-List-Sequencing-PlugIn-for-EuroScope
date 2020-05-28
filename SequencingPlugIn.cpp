@@ -3,7 +3,7 @@
 
 
 #define PLUGIN_NAME "Departure List Sequencing"
-#define PLUGIN_VERSION "0.9.3"
+#define PLUGIN_VERSION "0.9.4"
 #define PLUGIN_AUTHOR "Kingfu Chan"
 #define PLUGIN_COPYRIGHT "Copyright (C) 2020, Kingfu Chan"
 
@@ -21,8 +21,6 @@ const int TAG_FUNC_SEQ_PREV = 14; // previous status
 const int TAG_FUNC_SEQ_EDIT_FINISH = 15; // finish edit popup
 const int TAG_FUNC_SEQ_DELETE = 16; // delete from database
 
-const int TAG_TOP_SPEED = 80; // maximum speed before delete from memory
-
 // arrray indexes, see .h file SequencePosition
 const int M_ARRAY_NOMATCH = -1;
 
@@ -35,6 +33,10 @@ const char* SETTINGS_COLOR_CLEARED = "ColorClrd";
 // refresh interval
 const int DEFAULT_REFRESH_INTERVAL = 5;
 const char* SETTINGS_INTERVAL = "RefreshIntv";
+
+// maximum speed
+const int DEFAULT_MAX_SPEED = 80; // maximum speed before delete from memory
+const char* SETTINGS_MAX_SPEED = "MaxSpeed";
 
 // tag texts
 const char PLACE_HOLDER[] = "-------"; // place-holder
@@ -68,6 +70,7 @@ CSequencingPlugIn::CSequencingPlugIn(void)
 
 	m_SequenceArray.RemoveAll();
 
+	// load settings
 	CustomColorInac = TAG_COLOR_GREY;
 	CustomColorClrd = TAG_COLOR_BLUE;
 	ParseColorFromText(GetDataFromSettings(SETTINGS_COLOR_INACTIVE), CustomColorInac);
@@ -76,6 +79,11 @@ CSequencingPlugIn::CSequencingPlugIn(void)
 	const char* itvchar = GetDataFromSettings(SETTINGS_INTERVAL);
 	CustomRefreshIntv = itvchar == nullptr ?
 		DEFAULT_REFRESH_INTERVAL : atoi(itvchar);
+
+	const char* spdchar = GetDataFromSettings(SETTINGS_MAX_SPEED);
+	CustomMaxSpeed = spdchar == nullptr ?
+		DEFAULT_MAX_SPEED : atoi(spdchar);
+
 }
 
 
@@ -305,6 +313,7 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 		return false;
 
 	cmd = cmd.Mid(5);
+	CString msg; // for display
 
 	if (cmd == "REMOVE ALL") {
 		m_SequenceArray.RemoveAll();
@@ -327,7 +336,6 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 		bool success = ParseColorFromText(colordata, CustomColorInac);
 		if (success) {
 			SaveDataToSettings(SETTINGS_COLOR_INACTIVE, "custom color for inactive tags", colordata);
-			CString msg;
 			msg.Format("Custom color for inactive tags have been set to (%s)!", colordata);
 			DisplayMessage(msg);
 		}
@@ -339,7 +347,6 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 		bool success = ParseColorFromText(colordata, CustomColorClrd);
 		if (success) {
 			SaveDataToSettings(SETTINGS_COLOR_CLEARED, "custom color for cleared tags", colordata);
-			CString msg;
 			msg.Format("Custom color for cleared tags have been set to (%s)!", colordata);
 			DisplayMessage(msg);
 		}
@@ -366,7 +373,8 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 		if (itv >= 1) {
 			CustomRefreshIntv = itv;
 			SaveDataToSettings(SETTINGS_INTERVAL, "custom refresh interval", itvstr);
-			DisplayMessage("Refresh interval has been set!");
+			msg.Format("Refresh interval has been set to %d seconds!", itv);
+			DisplayMessage(msg);
 			return true;
 		}
 	}
@@ -377,6 +385,27 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 		itvstr.Format("%d", CustomRefreshIntv);
 		SaveDataToSettings(SETTINGS_INTERVAL, "reset refresh interval", itvstr);
 		DisplayMessage("Default refresh interval has been set!");
+		return true;
+	}
+
+	if (cmd.Left(6) == "SPEED ") { // 6==strlen
+		CString spdstr = cmd.Mid(6);
+		int spd = atoi(spdstr);
+		if (spd > 30) {
+			CustomMaxSpeed = spd;
+			SaveDataToSettings(SETTINGS_MAX_SPEED, "custom maximum speed", spdstr);
+			msg.Format("Maximum speed has been set to %d knots!", spd);
+			DisplayMessage(msg);
+			return true;
+		}
+	}
+
+	if (cmd == "SPEED RESET") {
+		CustomMaxSpeed = DEFAULT_MAX_SPEED;
+		CString spdstr;
+		spdstr.Format("%d", CustomMaxSpeed);
+		SaveDataToSettings(SETTINGS_MAX_SPEED, "reset maximum speed", spdstr);
+		DisplayMessage("Default maximum speed has been set!");
 		return true;
 	}
 
@@ -400,7 +429,7 @@ void CSequencingPlugIn::OnTimer(int Counter) {
 			continue;
 		}
 		rt = RadarTargetSelect(m_SequenceArray[idx].m_callsign);
-		if (rt.GetGS() > TAG_TOP_SPEED) { // criterion for taking off
+		if (rt.GetGS() > CustomMaxSpeed) { // criterion for taking off
 			TRACE("%s\tremoved\n", m_SequenceArray[idx].m_callsign);
 			m_SequenceArray.RemoveAt(idx);
 		}

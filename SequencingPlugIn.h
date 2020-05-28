@@ -32,7 +32,7 @@ public:
 private:
 	CArray<SequenceData, SequenceData&> m_SequenceArray;
 	COLORREF CustomColorClrd, CustomColorInac;
-	int CustomRefreshIntv;
+	int CustomRefreshIntv, CustomMaxSpeed;
 	SequencePosition GetSequenceData(const char* callsign);
 	bool IsCallsignOnline(const char* callsign);
 	bool ParseColorFromText(const char* text, COLORREF& color);
