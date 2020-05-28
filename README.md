@@ -5,7 +5,7 @@ Help arranging sequences of DEL, GND and TWR in EuroScope.
 ## Features
 
 This plugin can manage sequences during 3 phases of ground activities: delivery, push & taxi, take-off. In order to help identify the status of a flight and sort with the departure list, respectively they are named **CLRN**, **PUSH**, **TKOF**. Each status includes 2 sub-status, which is *clrd* for cleared and *stby* for stand-by. These two status can be distinguished not only by the number of the sequence at the rear of the string but also the color of the text itself. For *clrd* it shows **--- (e.g. TKOF---)** in light blue by default, while for *stby* it shows **the number of its sequences (e.g. CLRN-08)** in the color of your list settings by default. The plugin accepts a maximum of 99 flights on each phases which I believe is enough for most circumstances. To prevent possible confusion when a flight reconnects to VATSIM, this plugin will automatically remember the sequence at the moment they disconnect and insert them to where they shoud be after reconnecting.
-Various configurations can be made manually and save to ES config files through the command line methods below, providing flexiblity for users with different demands.
+Various configurations can be made manually and be saved into ES config files through the command line methods below, providing flexiblity for users with different demands.
 
 
 ## How to use it
