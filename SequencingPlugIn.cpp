@@ -3,9 +3,10 @@
 
 
 #define PLUGIN_NAME "Departure List Sequencing"
-#define PLUGIN_VERSION "0.9.4"
+#define PLUGIN_VERSION "0.9.5"
 #define PLUGIN_AUTHOR "Kingfu Chan"
-#define PLUGIN_COPYRIGHT "Copyright (C) 2020, Kingfu Chan"
+#define PLUGIN_COPYRIGHT "MIT License, Copyright (c) 2020 Kingfu Chan"
+#define GITHUB_LINK "https://github.com/KingfuChan/Departure-List-Sequencing-PlugIn-for-EuroScope"
 
 
 // TAG ITEM TYPE
@@ -14,12 +15,14 @@ const int TAG_ITEM_TYPE_SEQ_STATUS = 1;
 // TAG FUNCTIONS
 const int TAG_FUNC_SEQ_POPUP = 1; // pop up item
 const int TAG_FUNC_SEQ_EDIT_POPUP = 2; // edit
+const int TAG_FUNC_SEQ_SEPERATOR = 10;
 const int TAG_FUNC_SEQ_START = 11;
 const int TAG_FUNC_SEQ_RESET = 12; // reset status
-const int TAG_FUNC_SEQ_NEXT = 13; // next status
-const int TAG_FUNC_SEQ_PREV = 14; // previous status
-const int TAG_FUNC_SEQ_EDIT_FINISH = 15; // finish edit popup
-const int TAG_FUNC_SEQ_DELETE = 16; // delete from database
+const int TAG_FUNC_SEQ_NEXT_STBY = 13; // next standby status
+const int TAG_FUNC_SEQ_NEXT_CLRD = 14; // next cleared status
+const int TAG_FUNC_SEQ_PREV = 15; // previous status
+const int TAG_FUNC_SEQ_EDIT_FINISH = 16; // finish edit popup
+const int TAG_FUNC_SEQ_DELETE = 17; // delete from database
 
 // arrray indexes, see .h file SequencePosition
 const int M_ARRAY_NOMATCH = -1;
@@ -62,7 +65,7 @@ CSequencingPlugIn::CSequencingPlugIn(void)
 		PLUGIN_COPYRIGHT)
 {
 	// custsom initialization
-	AddAlias(".cjf", "Kingfu Chan"); //just for fun
+	AddAlias(".cjf", ".KingfuChan"); //just for fun
 
 	//tag related
 	RegisterTagItemType("Ground Sequence", TAG_ITEM_TYPE_SEQ_STATUS);
@@ -218,10 +221,17 @@ void CSequencingPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, 
 			// little bit tricky :D
 			int sts = m_SequenceArray[seqpos.m_index].m_status;
 			if (sts < GroundStatus::CLRD_TAKEOFF)
-				AddPopupListElement(STATUS_DESCRIPTION[sts / 2], sts % 2 ? "clrd" : "stby", TAG_FUNC_SEQ_NEXT);
+				AddPopupListElement(STATUS_DESCRIPTION[sts / 2], "clrd", TAG_FUNC_SEQ_NEXT_CLRD);
+
+			if (sts == GroundStatus::CLRD_CLEARANCE || sts == GroundStatus::CLRD_PUSHTAXI)
+				AddPopupListElement(STATUS_DESCRIPTION[sts / 2], "stby", TAG_FUNC_SEQ_NEXT_STBY);
+
+			AddPopupListElement("----", "", TAG_FUNC_SEQ_SEPERATOR);
 
 			if (sts > GroundStatus::STBY_CLEARANCE)
 				AddPopupListElement(STATUS_DESCRIPTION[sts / 2 - 1], sts % 2 ? "clrd" : "stby", TAG_FUNC_SEQ_PREV);
+
+			AddPopupListElement("----", "", TAG_FUNC_SEQ_SEPERATOR);
 
 			if (sts % 2) // stby status
 				AddPopupListElement("Edit", "SEQ", TAG_FUNC_SEQ_EDIT_POPUP);
@@ -248,22 +258,28 @@ void CSequencingPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, 
 		m_SequenceArray.Add(seqnew);
 		break;
 
-	case TAG_FUNC_SEQ_NEXT:
+	case TAG_FUNC_SEQ_NEXT_STBY:
 
 		seqnew = m_SequenceArray[seqpos.m_index];
-		if (++seqnew.m_status <= GroundStatus::CLRD_TAKEOFF) { // shouldn't be true
-			m_SequenceArray.RemoveAt(seqpos.m_index);
-			m_SequenceArray.Add(seqnew);
-		}
+		seqnew.m_status += seqnew.m_status % 2 ? 2 : 1;
+		m_SequenceArray.RemoveAt(seqpos.m_index);
+		m_SequenceArray.Add(seqnew);
+		break;
+
+	case TAG_FUNC_SEQ_NEXT_CLRD:
+
+		seqnew = m_SequenceArray[seqpos.m_index];
+		seqnew.m_status += seqnew.m_status % 2 ? 1 : 2;
+		m_SequenceArray.RemoveAt(seqpos.m_index);
+		m_SequenceArray.Add(seqnew);
 		break;
 
 	case TAG_FUNC_SEQ_PREV:
 
 		seqnew = m_SequenceArray[seqpos.m_index];
-		if (--seqnew.m_status >= GroundStatus::STBY_CLEARANCE) { // shouldn't be true
-			m_SequenceArray.RemoveAt(seqpos.m_index);
-			m_SequenceArray.Add(seqnew);
-		}
+		seqnew.m_status--;
+		m_SequenceArray.RemoveAt(seqpos.m_index);
+		m_SequenceArray.Add(seqnew);
 		break;
 
 	case TAG_FUNC_SEQ_EDIT_POPUP:
@@ -309,6 +325,12 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 	CString cmd = sCommandLine;
 	cmd.Trim();
 	cmd.MakeUpper();
+
+	if (cmd == ".DLS" || cmd == ".CJF" || cmd == ".KINGFUCHAN") { // for fun
+		DisplayMessage(GITHUB_LINK);
+		return true;
+	}
+
 	if (cmd.Left(4) == ".DLS " || cmd.GetLength() < 5) // undefined
 		return false;
 
