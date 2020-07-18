@@ -31,7 +31,8 @@ public:
 
 private:
 	CArray<SequenceData, SequenceData&> m_SequenceArray;
-	COLORREF CustomColorClrd, CustomColorInac;
+	bool CustomColorStby, CustomColorClrd;
+	COLORREF CurrentColorStby, CurrentColorClrd; // do not use when bool above are false
 	int CustomRefreshIntv, CustomMaxSpeed;
 	SequencePosition GetSequenceData(const char* callsign);
 	bool IsCallsignOnline(const char* callsign);

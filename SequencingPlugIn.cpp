@@ -3,7 +3,7 @@
 
 
 #define PLUGIN_NAME "Departure List Sequencing"
-#define PLUGIN_VERSION "0.9.5"
+#define PLUGIN_VERSION "0.9.6"
 #define PLUGIN_AUTHOR "Kingfu Chan"
 #define PLUGIN_COPYRIGHT "MIT License, Copyright (c) 2020 Kingfu Chan"
 #define GITHUB_LINK "https://github.com/KingfuChan/Departure-List-Sequencing-PlugIn-for-EuroScope"
@@ -28,9 +28,7 @@ const int TAG_FUNC_SEQ_DELETE = 17; // delete from database
 const int M_ARRAY_NOMATCH = -1;
 
 // colors
-const COLORREF TAG_COLOR_GREY = 0x009B9B9B;
-const COLORREF TAG_COLOR_BLUE = 0x00E2E481;
-const char* SETTINGS_COLOR_INACTIVE = "ColorInac";
+const char* SETTINGS_COLOR_STANDBY = "ColorStby";
 const char* SETTINGS_COLOR_CLEARED = "ColorClrd";
 
 // refresh interval
@@ -42,7 +40,7 @@ const int DEFAULT_MAX_SPEED = 80; // maximum speed before delete from memory
 const char* SETTINGS_MAX_SPEED = "MaxSpeed";
 
 // tag texts
-const char PLACE_HOLDER[] = "-------"; // place-holder
+const char PLACE_HOLDER[] = "_______"; // place-holder, the text itself is useless
 const char STATUS_DESCRIPTION[3][5] = { "CLRN","PUST","TKOF" };
 
 namespace GroundStatus { // note that even numbers are clrd
@@ -73,11 +71,9 @@ CSequencingPlugIn::CSequencingPlugIn(void)
 
 	m_SequenceArray.RemoveAll();
 
-	// load settings
-	CustomColorInac = TAG_COLOR_GREY;
-	CustomColorClrd = TAG_COLOR_BLUE;
-	ParseColorFromText(GetDataFromSettings(SETTINGS_COLOR_INACTIVE), CustomColorInac);
-	ParseColorFromText(GetDataFromSettings(SETTINGS_COLOR_CLEARED), CustomColorClrd);
+	// load settings, note that parse color will return a bool
+	CustomColorStby = ParseColorFromText(GetDataFromSettings(SETTINGS_COLOR_STANDBY), CurrentColorStby);
+	CustomColorClrd = ParseColorFromText(GetDataFromSettings(SETTINGS_COLOR_CLEARED), CurrentColorClrd);
 
 	const char* itvchar = GetDataFromSettings(SETTINGS_INTERVAL);
 	CustomRefreshIntv = itvchar == nullptr ?
@@ -131,8 +127,11 @@ bool CSequencingPlugIn::IsCallsignOnline(const char* callsign) {
 
 
 bool CSequencingPlugIn::ParseColorFromText(const char* text, COLORREF& color) {
-	if (text == nullptr)
+	// set color according to text, if unsuccessful will set color to black (in case mis-used)
+	if (text == nullptr) {
+		color = RGB(0, 0, 0);
 		return false;
+	}
 
 	int r, g, b;
 	if (sscanf_s(text, "%d,%d,%d", &r, &g, &b) == 3)
@@ -142,6 +141,8 @@ bool CSequencingPlugIn::ParseColorFromText(const char* text, COLORREF& color) {
 			color = RGB(r, g, b);
 			return true;
 		}
+
+	color = RGB(0, 0, 0);
 	return false;
 }
 
@@ -168,25 +169,27 @@ void CSequencingPlugIn::OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarT
 		SequencePosition seqpos;
 
 		seqpos = GetSequenceData(FlightPlan.GetCallsign());
-		if (seqpos.m_index == M_ARRAY_NOMATCH) {
-			strcpy_s(sItemString, strlen(PLACE_HOLDER) + 1, PLACE_HOLDER);
-			*pColorCode = TAG_COLOR_RGB_DEFINED;
-			*pRGB = CustomColorInac;
+		if (seqpos.m_index == M_ARRAY_NOMATCH)
 			return;
-		}
 
 		int seq;
 		seq = m_SequenceArray[seqpos.m_index].m_status % 2 ? seqpos.m_sequence : 0;
 
 		if (seq) { // stby
-			sprintf_s(sItemString, strlen(PLACE_HOLDER) + 1, "%s-%.2d",
+			sprintf_s(sItemString, strlen(PLACE_HOLDER) + 1, "%s_%.2d",
 				STATUS_DESCRIPTION[(m_SequenceArray[seqpos.m_index].m_status - 1) / 2], seq);
+			if (CustomColorStby) {
+				*pColorCode = TAG_COLOR_RGB_DEFINED;
+				*pRGB = CurrentColorStby;
+			}
 		}
 		else { // clrd
-			sprintf_s(sItemString, strlen(PLACE_HOLDER) + 1, "%s---",
+			sprintf_s(sItemString, strlen(PLACE_HOLDER) + 1, "%s___",
 				STATUS_DESCRIPTION[(m_SequenceArray[seqpos.m_index].m_status - 1) / 2]);
-			*pColorCode = TAG_COLOR_RGB_DEFINED;
-			*pRGB = CustomColorClrd;
+			if (CustomColorClrd) {
+				*pColorCode = TAG_COLOR_RGB_DEFINED;
+				*pRGB = CurrentColorClrd;
+			}
 		}
 	}
 }
@@ -352,39 +355,42 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 		return true;
 	}
 
-	// color format: rrr,ggg,bbb (no space, English comma)
-	if (cmd.Left(15) == "COLOR INACTIVE ") { // 15==strlen
-		const char* colordata = (LPCTSTR)cmd + 15;
-		bool success = ParseColorFromText(colordata, CustomColorInac);
-		if (success) {
-			SaveDataToSettings(SETTINGS_COLOR_INACTIVE, "custom color for inactive tags", colordata);
-			msg.Format("Custom color for inactive tags have been set to (%s)!", colordata);
+	// color format: rrr,ggg,bbb (no space, English comma), note that cmd is trimmed
+	if (cmd.Left(14) == "COLOR STANDBY ") { // 14==strlen
+		const char* colordata = (LPCTSTR)cmd + 14;
+		CustomColorStby = ParseColorFromText(colordata, CurrentColorStby);
+		if (CustomColorStby) {
+			SaveDataToSettings(SETTINGS_COLOR_STANDBY, "custom color for standby tags", colordata);
+			msg.Format("Custom color for standby tags have been set to (%s)!", colordata);
 			DisplayMessage(msg);
 		}
-		return success;
+		else {
+			SaveDataToSettings(SETTINGS_COLOR_STANDBY, "reset color for standby tags", nullptr);
+			DisplayMessage("Default colors for standby tags have been set!");
+		}
+		return true;
 	}
 
 	if (cmd.Left(14) == "COLOR CLEARED ") { // 14==strlen
 		const char* colordata = (LPCTSTR)cmd + 14;
-		bool success = ParseColorFromText(colordata, CustomColorClrd);
-		if (success) {
+		CustomColorClrd = ParseColorFromText(colordata, CurrentColorClrd);
+		if (CustomColorClrd) {
 			SaveDataToSettings(SETTINGS_COLOR_CLEARED, "custom color for cleared tags", colordata);
 			msg.Format("Custom color for cleared tags have been set to (%s)!", colordata);
 			DisplayMessage(msg);
 		}
-		return success;
+		else {
+			SaveDataToSettings(SETTINGS_COLOR_CLEARED, "reset color for cleared tags", nullptr);
+			DisplayMessage("Default colors for cleared tags have been set!");
+		}
+		return true;
 	}
 
 	if (cmd == "COLOR RESET") {
-		CustomColorClrd = TAG_COLOR_BLUE;
-		CustomColorInac = TAG_COLOR_GREY;
-		CString saveinac, saveclrd;
-		saveinac.Format("%d,%d,%d",
-			GetRValue(TAG_COLOR_GREY), GetGValue(TAG_COLOR_GREY), GetBValue(TAG_COLOR_GREY));
-		saveclrd.Format("%d,%d,%d",
-			GetRValue(TAG_COLOR_BLUE), GetGValue(TAG_COLOR_BLUE), GetBValue(TAG_COLOR_BLUE));
-		SaveDataToSettings(SETTINGS_COLOR_INACTIVE, "reset color for inactive tags", saveinac);
-		SaveDataToSettings(SETTINGS_COLOR_CLEARED, "reset color for cleared tags", saveclrd);
+		CustomColorStby = ParseColorFromText(nullptr, CurrentColorStby);
+		CustomColorClrd = ParseColorFromText(nullptr, CurrentColorClrd);
+		SaveDataToSettings(SETTINGS_COLOR_STANDBY, "reset color for standby tags", nullptr);
+		SaveDataToSettings(SETTINGS_COLOR_CLEARED, "reset color for cleared tags", nullptr);
 		DisplayMessage("Default colors for tags have been set!");
 		return true;
 	}
