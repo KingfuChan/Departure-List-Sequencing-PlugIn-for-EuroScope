@@ -180,7 +180,8 @@
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="resource.h" />
-    <ClInclude Include="SequencingPlugIn.h" />
+    <ClInclude Include="SeqDataPlugIn.h" />
+    <ClInclude Include="SeqDisplayPlugIn.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
@@ -190,7 +191,8 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="SequencingPlugIn.cpp" />
+    <ClCompile Include="SeqDataPlugIn.cpp" />
+    <ClCompile Include="SeqDisplayPlugIn.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Departure List Sequencing.rc" />

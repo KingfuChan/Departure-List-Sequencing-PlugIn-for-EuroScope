@@ -1,12 +1,14 @@
 #include "pch.h"
-#include "SequencingPlugIn.h"
+#include "SeqDisplayPlugIn.h"
 
 
+#ifndef COPYRIGHTS
 #define PLUGIN_NAME "Departure List Sequencing"
-#define PLUGIN_VERSION "0.9.6"
+#define PLUGIN_VERSION "1.0.0"
 #define PLUGIN_AUTHOR "Kingfu Chan"
 #define PLUGIN_COPYRIGHT "MIT License, Copyright (c) 2020 Kingfu Chan"
 #define GITHUB_LINK "https://github.com/KingfuChan/Departure-List-Sequencing-PlugIn-for-EuroScope"
+#endif // !COPYRIGHTS
 
 
 // TAG ITEM TYPE
@@ -24,44 +26,28 @@ const int TAG_FUNC_SEQ_PREV = 15; // previous status
 const int TAG_FUNC_SEQ_EDIT_FINISH = 16; // finish edit popup
 const int TAG_FUNC_SEQ_DELETE = 17; // delete from database
 
-// arrray indexes, see .h file SequencePosition
-const int M_ARRAY_NOMATCH = -1;
-
-// colors
+// setting names
 const char* SETTINGS_COLOR_STANDBY = "ColorStby";
 const char* SETTINGS_COLOR_CLEARED = "ColorClrd";
-
-// refresh interval
-const int DEFAULT_REFRESH_INTERVAL = 5;
 const char* SETTINGS_INTERVAL = "RefreshIntv";
-
-// maximum speed
-const int DEFAULT_MAX_SPEED = 80; // maximum speed before delete from memory
 const char* SETTINGS_MAX_SPEED = "MaxSpeed";
 
 // tag texts
 const char PLACE_HOLDER[] = "_______"; // place-holder, the text itself is useless
 const char STATUS_DESCRIPTION[3][5] = { "CLRN","PUST","TKOF" };
 
-namespace GroundStatus { // note that even numbers are clrd
-	const int STBY_CLEARANCE = 1;
-	const int CLRD_CLEARANCE = 2;
-	const int STBY_PUSHTAXI = 3;
-	const int CLRD_PUSHTAXI = 4;
-	const int STBY_TAKEOFF = 5;
-	const int CLRD_TAKEOFF = 6;
-};
+// status constants DO NOT CHANGE
+const int STATUS_STBY_CLEARANCE = 1;
+const int STATUS_CLRD_CLEARANCE = 2;
+const int STATUS_STBY_PUSHTAXI = 3;
+const int STATUS_CLRD_PUSHTAXI = 4;
+const int STATUS_STBY_TAKEOFF = 5;
+const int STATUS_CLRD_TAKEOFF = 6;
 
 using namespace EuroScopePlugIn;
 
 
-CSequencingPlugIn::CSequencingPlugIn(void)
-	: CPlugIn(EuroScopePlugIn::COMPATIBILITY_CODE,
-		PLUGIN_NAME,
-		PLUGIN_VERSION,
-		PLUGIN_AUTHOR,
-		PLUGIN_COPYRIGHT)
-{
+SeqDisplayPlugIn::SeqDisplayPlugIn(void) {
 	// custsom initialization
 	AddAlias(".cjf", ".KingfuChan"); //just for fun
 
@@ -69,64 +55,25 @@ CSequencingPlugIn::CSequencingPlugIn(void)
 	RegisterTagItemType("Ground Sequence", TAG_ITEM_TYPE_SEQ_STATUS);
 	RegisterTagItemFunction("GND SEQ Popup List", TAG_FUNC_SEQ_POPUP);
 
-	m_SequenceArray.RemoveAll();
-
 	// load settings, note that parse color will return a bool
 	CustomColorStby = ParseColorFromText(GetDataFromSettings(SETTINGS_COLOR_STANDBY), CurrentColorStby);
 	CustomColorClrd = ParseColorFromText(GetDataFromSettings(SETTINGS_COLOR_CLEARED), CurrentColorClrd);
-
+	// load settings for data class
 	const char* itvchar = GetDataFromSettings(SETTINGS_INTERVAL);
-	CustomRefreshIntv = itvchar == nullptr ?
-		DEFAULT_REFRESH_INTERVAL : atoi(itvchar);
-
 	const char* spdchar = GetDataFromSettings(SETTINGS_MAX_SPEED);
-	CustomMaxSpeed = spdchar == nullptr ?
-		DEFAULT_MAX_SPEED : atoi(spdchar);
+	int itv = itvchar == nullptr ? 0 : atoi(itvchar);
+	int spd = spdchar == nullptr ? 0 : atoi(spdchar);
+	ConfigurePlugin(&itv, &spd);
 
 }
 
 
-CSequencingPlugIn::~CSequencingPlugIn(void) {
+SeqDisplayPlugIn::~SeqDisplayPlugIn(void) {
+
 }
 
 
-// custom funcitons
-
-
-SequencePosition CSequencingPlugIn::GetSequenceData(const char* callsign) {
-	//also calculates sequence number, note that may not be able to change data
-	int ary, idx, seq[3] = { 0,0,0 };
-	SequencePosition sp;
-
-	for (idx = 0; idx < m_SequenceArray.GetCount(); idx++) {
-		ary = (m_SequenceArray[idx].m_status - 1) / 2; // array index
-		if (!m_SequenceArray[idx].m_active) // double check online, avoid potential bugs on refresh
-			m_SequenceArray[idx].m_active = IsCallsignOnline(callsign);
-		if (m_SequenceArray[idx].m_active && m_SequenceArray[idx].m_status % 2) // stby status
-			++seq[ary];
-		if (!strcmp(m_SequenceArray[idx].m_callsign, callsign)) {
-			sp.m_index = idx;
-			sp.m_sequence = seq[ary];
-			return sp;
-		}
-	}
-
-	sp.m_index = M_ARRAY_NOMATCH;
-	sp.m_sequence = M_ARRAY_NOMATCH;
-	return sp;
-}
-
-
-bool CSequencingPlugIn::IsCallsignOnline(const char* callsign) {
-	CRadarTarget rt;
-	for (rt = RadarTargetSelectFirst(); rt.IsValid(); rt = RadarTargetSelectNext(rt))
-		if (!strcmp(callsign, rt.GetCallsign()))
-			return true;
-	return false;
-}
-
-
-bool CSequencingPlugIn::ParseColorFromText(const char* text, COLORREF& color) {
+bool SeqDisplayPlugIn::ParseColorFromText(const char* text, COLORREF& color) {
 	// set color according to text, if unsuccessful will set color to black (in case mis-used)
 	if (text == nullptr) {
 		color = RGB(0, 0, 0);
@@ -147,7 +94,7 @@ bool CSequencingPlugIn::ParseColorFromText(const char* text, COLORREF& color) {
 }
 
 
-void CSequencingPlugIn::DisplayMessage(const char* msg) {
+void SeqDisplayPlugIn::DisplayMessage(const char* msg) {
 	// unified display method with fixed parameters
 	DisplayUserMessage("Message", "DLS Plugin",
 		msg,
@@ -155,10 +102,10 @@ void CSequencingPlugIn::DisplayMessage(const char* msg) {
 }
 
 
-// below are inherited functions
+// below are inherited methods
 
 
-void CSequencingPlugIn::OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarTarget,
+void SeqDisplayPlugIn::OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarTarget,
 	int ItemCode, int TagData, char sItemString[16],
 	int* pColorCode, COLORREF* pRGB, double* pFontSize)
 {
@@ -166,18 +113,19 @@ void CSequencingPlugIn::OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarT
 		return;
 
 	if (ItemCode == TAG_ITEM_TYPE_SEQ_STATUS) {
-		SequencePosition seqpos;
+		SequenceData sd;
 
-		seqpos = GetSequenceData(FlightPlan.GetCallsign());
-		if (seqpos.m_index == M_ARRAY_NOMATCH)
+		sd = GetSequence(FlightPlan.GetCallsign());
+		if (sd.m_status < 0 || !sd.m_active)
 			return;
 
-		int seq;
-		seq = m_SequenceArray[seqpos.m_index].m_status % 2 ? seqpos.m_sequence : 0;
+		int sts = sd.m_status;
+		int seq = sd.m_sequence;
+		int atv = sd.m_active;
 
 		if (seq) { // stby
 			sprintf_s(sItemString, strlen(PLACE_HOLDER) + 1, "%s_%.2d",
-				STATUS_DESCRIPTION[(m_SequenceArray[seqpos.m_index].m_status - 1) / 2], seq);
+				STATUS_DESCRIPTION[(sts - 1) / 2], seq);
 			if (CustomColorStby) {
 				*pColorCode = TAG_COLOR_RGB_DEFINED;
 				*pRGB = CurrentColorStby;
@@ -185,7 +133,7 @@ void CSequencingPlugIn::OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarT
 		}
 		else { // clrd
 			sprintf_s(sItemString, strlen(PLACE_HOLDER) + 1, "%s___",
-				STATUS_DESCRIPTION[(m_SequenceArray[seqpos.m_index].m_status - 1) / 2]);
+				STATUS_DESCRIPTION[(sts - 1) / 2]);
 			if (CustomColorClrd) {
 				*pColorCode = TAG_COLOR_RGB_DEFINED;
 				*pRGB = CurrentColorClrd;
@@ -195,21 +143,20 @@ void CSequencingPlugIn::OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarT
 }
 
 
-void CSequencingPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, POINT Pt, RECT Area) {
+void SeqDisplayPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, POINT Pt, RECT Area) {
 	EuroScopePlugIn::CFlightPlan fp;
-	SequenceData seqnew;
-	SequencePosition seqpos;
+	SequenceData sd;
 
 	fp = FlightPlanSelectASEL();
 	if (!fp.IsValid())
 		return;
 
-	seqpos = GetSequenceData(fp.GetCallsign());
-
-	if (seqpos.m_index == M_ARRAY_NOMATCH
+	sd = GetSequence(fp.GetCallsign());
+	if (sd.m_status < 0
 		&& FunctionId != TAG_FUNC_SEQ_POPUP && FunctionId != TAG_FUNC_SEQ_START)
 		return;
 
+	// TODO:
 	switch (FunctionId)
 	{
 
@@ -217,21 +164,21 @@ void CSequencingPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, 
 
 		OpenPopupList(Area, "SEQ Menu", 2);
 
-		if (seqpos.m_index == M_ARRAY_NOMATCH)
+		if (sd.m_status < 0)
 			AddPopupListElement("Start", "SEQ", TAG_FUNC_SEQ_START);
 		else {
 
 			// little bit tricky :D
-			int sts = m_SequenceArray[seqpos.m_index].m_status;
-			if (sts < GroundStatus::CLRD_TAKEOFF)
+			int sts = sd.m_status;
+			if (sts < STATUS_CLRD_TAKEOFF)
 				AddPopupListElement(STATUS_DESCRIPTION[sts / 2], "clrd", TAG_FUNC_SEQ_NEXT_CLRD);
 
-			if (sts == GroundStatus::CLRD_CLEARANCE || sts == GroundStatus::CLRD_PUSHTAXI)
+			if (sts == STATUS_CLRD_CLEARANCE || sts == STATUS_CLRD_PUSHTAXI)
 				AddPopupListElement(STATUS_DESCRIPTION[sts / 2], "stby", TAG_FUNC_SEQ_NEXT_STBY);
 
 			AddPopupListElement("----", "", TAG_FUNC_SEQ_SEPERATOR);
 
-			if (sts > GroundStatus::STBY_CLEARANCE)
+			if (sts > STATUS_STBY_CLEARANCE)
 				AddPopupListElement(STATUS_DESCRIPTION[sts / 2 - 1], sts % 2 ? "clrd" : "stby", TAG_FUNC_SEQ_PREV);
 
 			AddPopupListElement("----", "", TAG_FUNC_SEQ_SEPERATOR);
@@ -246,76 +193,37 @@ void CSequencingPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, 
 		break;
 	case TAG_FUNC_SEQ_START:
 	{
-		SequenceData seqstart = {
-			fp.GetCallsign(),
-			GroundStatus::STBY_CLEARANCE,
-			true };
-		m_SequenceArray.Add(seqstart);
+		AddSequence(fp.GetCallsign());
 		break;
 	}
 	case TAG_FUNC_SEQ_RESET:
-
-		seqnew = m_SequenceArray[seqpos.m_index];
-		m_SequenceArray.RemoveAt(seqpos.m_index);
-		seqnew.m_status = GroundStatus::STBY_CLEARANCE;
-		m_SequenceArray.Add(seqnew);
+		EditStatus(fp.GetCallsign(), 0);
 		break;
 
 	case TAG_FUNC_SEQ_NEXT_STBY:
-
-		seqnew = m_SequenceArray[seqpos.m_index];
-		seqnew.m_status += seqnew.m_status % 2 ? 2 : 1;
-		m_SequenceArray.RemoveAt(seqpos.m_index);
-		m_SequenceArray.Add(seqnew);
+		EditStatus(fp.GetCallsign(), 1);
 		break;
 
 	case TAG_FUNC_SEQ_NEXT_CLRD:
-
-		seqnew = m_SequenceArray[seqpos.m_index];
-		seqnew.m_status += seqnew.m_status % 2 ? 1 : 2;
-		m_SequenceArray.RemoveAt(seqpos.m_index);
-		m_SequenceArray.Add(seqnew);
+		EditStatus(fp.GetCallsign(), 2);
 		break;
 
 	case TAG_FUNC_SEQ_PREV:
-
-		seqnew = m_SequenceArray[seqpos.m_index];
-		seqnew.m_status--;
-		m_SequenceArray.RemoveAt(seqpos.m_index);
-		m_SequenceArray.Add(seqnew);
+		EditStatus(fp.GetCallsign(), -1);
 		break;
 
 	case TAG_FUNC_SEQ_EDIT_POPUP:
-
 		OpenPopupEdit(Area, TAG_FUNC_SEQ_EDIT_FINISH, "");
 		break;
 
 	case TAG_FUNC_SEQ_EDIT_FINISH:
-
 		int ns; // new sequence
-		if (sscanf_s(sItemString, "%d", &ns) > 0) {
-			int idx, ary, seq[3] = { 0,0,0 }, tidx;
-
-			for (idx = 0; idx < m_SequenceArray.GetCount(); idx++) { // to locate where to insert
-				ary = (m_SequenceArray[idx].m_status - 1) / 2; // array index
-				if (m_SequenceArray[idx].m_active && m_SequenceArray[idx].m_status % 2) // stby status
-					++seq[ary];
-				if (seq[(m_SequenceArray[seqpos.m_index].m_status - 1) / 2] == ns)
-					tidx = idx;
-			}
-
-			if (ns <= seq[(m_SequenceArray[seqpos.m_index].m_status - 1) / 2]
-				&& ns > 0) { // valid edit: between 0 and max sequence of the status
-				SequenceData seqnew = m_SequenceArray[seqpos.m_index];
-				m_SequenceArray.RemoveAt(seqpos.m_index);
-				m_SequenceArray.InsertAt(tidx, seqnew);
-			}
-		}
+		if (sscanf_s(sItemString, "%d", &ns) > 0)
+			EditSequence(sd, ns);
 		break;
 
 	case TAG_FUNC_SEQ_DELETE:
-
-		m_SequenceArray.RemoveAt(seqpos.m_index);
+		PopSequence(fp.GetCallsign());
 		break;
 
 	default:
@@ -324,7 +232,7 @@ void CSequencingPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, 
 }
 
 
-bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
+bool SeqDisplayPlugIn::OnCompileCommand(const char* sCommandLine) {
 	CString cmd = sCommandLine;
 	cmd.Trim();
 	cmd.MakeUpper();
@@ -341,16 +249,13 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 	CString msg; // for display
 
 	if (cmd == "REMOVE ALL") {
-		m_SequenceArray.RemoveAll();
+		RemoveAll();
 		DisplayMessage("All sequences have been removed!");
 		return true;
 	}
 
 	if (cmd == "REMOVE OFFLINE") {
-		int idx;
-		for (idx = 0; idx < m_SequenceArray.GetCount(); idx++)
-			if (!IsCallsignOnline(m_SequenceArray[idx].m_callsign))
-				m_SequenceArray.RemoveAt(idx);
+		RemoveOffline();
 		DisplayMessage("All offline sequences have been removed!");
 		return true;
 	}
@@ -399,7 +304,7 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 		CString itvstr = cmd.Mid(9);
 		int itv = atoi(itvstr);
 		if (itv >= 1) {
-			CustomRefreshIntv = itv;
+			ConfigurePlugin(&itv, nullptr);
 			SaveDataToSettings(SETTINGS_INTERVAL, "custom refresh interval", itvstr);
 			msg.Format("Refresh interval has been set to %d seconds!", itv);
 			DisplayMessage(msg);
@@ -408,10 +313,8 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 	}
 
 	if (cmd == "INTERVAL RESET") {
-		CustomRefreshIntv = DEFAULT_REFRESH_INTERVAL;
-		CString itvstr;
-		itvstr.Format("%d", CustomRefreshIntv);
-		SaveDataToSettings(SETTINGS_INTERVAL, "reset refresh interval", itvstr);
+		ConfigurePlugin(0, nullptr);
+		SaveDataToSettings(SETTINGS_INTERVAL, "reset refresh interval", nullptr);
 		DisplayMessage("Default refresh interval has been set!");
 		return true;
 	}
@@ -419,8 +322,8 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 	if (cmd.Left(6) == "SPEED ") { // 6==strlen
 		CString spdstr = cmd.Mid(6);
 		int spd = atoi(spdstr);
-		if (spd > 30) {
-			CustomMaxSpeed = spd;
+		if (spd >= 30) {
+			ConfigurePlugin(nullptr, &spd);
 			SaveDataToSettings(SETTINGS_MAX_SPEED, "custom maximum speed", spdstr);
 			msg.Format("Maximum speed has been set to %d knots!", spd);
 			DisplayMessage(msg);
@@ -429,37 +332,10 @@ bool CSequencingPlugIn::OnCompileCommand(const char* sCommandLine) {
 	}
 
 	if (cmd == "SPEED RESET") {
-		CustomMaxSpeed = DEFAULT_MAX_SPEED;
-		CString spdstr;
-		spdstr.Format("%d", CustomMaxSpeed);
-		SaveDataToSettings(SETTINGS_MAX_SPEED, "reset maximum speed", spdstr);
+		ConfigurePlugin(nullptr, 0);
+		SaveDataToSettings(SETTINGS_MAX_SPEED, "reset maximum speed", nullptr);
 		DisplayMessage("Default maximum speed has been set!");
 		return true;
 	}
-
 	return false;
-}
-
-
-void CSequencingPlugIn::OnTimer(int Counter) {
-	// update active information for all aircrafts
-	if (Counter % CustomRefreshIntv) // once every n seconds
-		return;
-
-	CRadarTarget rt;
-	int idx;
-	bool online;
-	for (idx = 0; idx < m_SequenceArray.GetCount(); idx++) {
-		online = IsCallsignOnline(m_SequenceArray[idx].m_callsign);
-		m_SequenceArray[idx].m_active = online;
-		if (!online) { // avoid potential errors
-			TRACE("%s\tinactive\n", m_SequenceArray[idx].m_callsign);
-			continue;
-		}
-		rt = RadarTargetSelect(m_SequenceArray[idx].m_callsign);
-		if (rt.GetGS() > CustomMaxSpeed) { // criterion for taking off
-			TRACE("%s\tremoved\n", m_SequenceArray[idx].m_callsign);
-			m_SequenceArray.RemoveAt(idx);
-		}
-	}
 }
