@@ -3,10 +3,6 @@
 
 
 #ifndef COPYRIGHTS
-#define PLUGIN_NAME "Departure List Sequencing"
-#define PLUGIN_VERSION "1.0.0"
-#define PLUGIN_AUTHOR "Kingfu Chan"
-#define PLUGIN_COPYRIGHT "MIT License, Copyright (c) 2020 Kingfu Chan"
 #define GITHUB_LINK "https://github.com/KingfuChan/Departure-List-Sequencing-PlugIn-for-EuroScope"
 #endif // !COPYRIGHTS
 
@@ -31,6 +27,7 @@ const char* SETTINGS_COLOR_STANDBY = "ColorStby";
 const char* SETTINGS_COLOR_CLEARED = "ColorClrd";
 const char* SETTINGS_INTERVAL = "RefreshIntv";
 const char* SETTINGS_MAX_SPEED = "MaxSpeed";
+const char* SETTINGS_SYNC = "SyncMode";
 
 // tag texts
 const char PLACE_HOLDER[] = "_______"; // place-holder, the text itself is useless
@@ -61,10 +58,13 @@ SeqDisplayPlugIn::SeqDisplayPlugIn(void) {
 	// load settings for data class
 	const char* itvchar = GetDataFromSettings(SETTINGS_INTERVAL);
 	const char* spdchar = GetDataFromSettings(SETTINGS_MAX_SPEED);
+	const char* synchar = GetDataFromSettings(SETTINGS_SYNC);
 	int itv = itvchar == nullptr ? 0 : atoi(itvchar);
 	int spd = spdchar == nullptr ? 0 : atoi(spdchar);
-	ConfigurePlugin(&itv, &spd);
+	ConfigurePlugin(&itv, &spd, synchar);
 
+	DisplayMessage("Departure List Sequencing Plugin Loaded!");
+	DisplayMessage(CString("For help please refer to ") + GITHUB_LINK);
 }
 
 
@@ -112,17 +112,37 @@ void SeqDisplayPlugIn::OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarTa
 	if (!(FlightPlan.IsValid() || RadarTarget.IsValid()))
 		return;
 
-	if (ItemCode == TAG_ITEM_TYPE_SEQ_STATUS) {
-		SequenceData sd;
+	if (ItemCode != TAG_ITEM_TYPE_SEQ_STATUS)  return;
+	SequenceData sd;
 
-		sd = GetSequence(FlightPlan.GetCallsign());
-		if (sd.m_status < 0 || !sd.m_active)
+	sd = GetSequence(FlightPlan);
+	int sts = sd.m_status;
+	int synsts = sd.m_syncstatus;
+	int seq = sd.m_sequence;
+	int atv = sd.m_active;
+	if (!atv) return; // not active
+	else if (sts < 0) { // not found
+		if (synsts < STATUS_STBY_CLEARANCE || synsts > STATUS_CLRD_TAKEOFF)
 			return;
-
-		int sts = sd.m_status;
-		int seq = sd.m_sequence;
-		int atv = sd.m_active;
-
+		// there is a sync status
+		if (synsts % 2) { // stby
+			sprintf_s(sItemString, strlen(PLACE_HOLDER) + 1, "%s_??",
+				STATUS_DESCRIPTION[(synsts - 1) / 2]);
+			if (CustomColorStby) {
+				*pColorCode = TAG_COLOR_RGB_DEFINED;
+				*pRGB = CurrentColorStby;
+			}
+		}
+		else { // clrd
+			sprintf_s(sItemString, strlen(PLACE_HOLDER) + 1, "%s__x",
+				STATUS_DESCRIPTION[(synsts - 1) / 2]);
+			if (CustomColorClrd) {
+				*pColorCode = TAG_COLOR_RGB_DEFINED;
+				*pRGB = CurrentColorClrd;
+			}
+		}
+	}
+	else {
 		if (seq) { // stby
 			sprintf_s(sItemString, strlen(PLACE_HOLDER) + 1, "%s_%.2d",
 				STATUS_DESCRIPTION[(sts - 1) / 2], seq);
@@ -151,12 +171,11 @@ void SeqDisplayPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, P
 	if (!fp.IsValid())
 		return;
 
-	sd = GetSequence(fp.GetCallsign());
+	sd = GetSequence(fp);
 	if (sd.m_status < 0
 		&& FunctionId != TAG_FUNC_SEQ_POPUP && FunctionId != TAG_FUNC_SEQ_START)
 		return;
 
-	// TODO:
 	switch (FunctionId)
 	{
 
@@ -186,30 +205,33 @@ void SeqDisplayPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, P
 			if (sts % 2) // stby status
 				AddPopupListElement("Edit", "SEQ", TAG_FUNC_SEQ_EDIT_POPUP);
 
-			AddPopupListElement("Reset", "STS", TAG_FUNC_SEQ_RESET);
+			AddPopupListElement("Reset", "STS", TAG_FUNC_SEQ_RESET); // TODO: SYNC related
 			AddPopupListElement("Delete", "STS", TAG_FUNC_SEQ_DELETE);
 		}
 
 		break;
-	case TAG_FUNC_SEQ_START:
-	{
-		AddSequence(fp.GetCallsign());
+	case TAG_FUNC_SEQ_START: {
+		int synsts = sd.m_syncstatus;
+		AddSequence(fp);
+		if (synsts >= STATUS_STBY_CLEARANCE && synsts <= STATUS_CLRD_TAKEOFF)
+			for (int t = 1; t < synsts; t++)
+				EditStatus(fp, t % 2 + 1);
 		break;
 	}
 	case TAG_FUNC_SEQ_RESET:
-		EditStatus(fp.GetCallsign(), 0);
+		EditStatus(fp, 0);
 		break;
 
 	case TAG_FUNC_SEQ_NEXT_STBY:
-		EditStatus(fp.GetCallsign(), 1);
+		EditStatus(fp, 1);
 		break;
 
 	case TAG_FUNC_SEQ_NEXT_CLRD:
-		EditStatus(fp.GetCallsign(), 2);
+		EditStatus(fp, 2);
 		break;
 
 	case TAG_FUNC_SEQ_PREV:
-		EditStatus(fp.GetCallsign(), -1);
+		EditStatus(fp, -1);
 		break;
 
 	case TAG_FUNC_SEQ_EDIT_POPUP:
@@ -223,7 +245,7 @@ void SeqDisplayPlugIn::OnFunctionCall(int FunctionId, const char* sItemString, P
 		break;
 
 	case TAG_FUNC_SEQ_DELETE:
-		PopSequence(fp.GetCallsign());
+		PopSequence(fp);
 		break;
 
 	default:
@@ -304,7 +326,7 @@ bool SeqDisplayPlugIn::OnCompileCommand(const char* sCommandLine) {
 		CString itvstr = cmd.Mid(9);
 		int itv = atoi(itvstr);
 		if (itv >= 1) {
-			ConfigurePlugin(&itv, nullptr);
+			ConfigurePlugin(&itv, nullptr, nullptr);
 			SaveDataToSettings(SETTINGS_INTERVAL, "custom refresh interval", itvstr);
 			msg.Format("Refresh interval has been set to %d seconds!", itv);
 			DisplayMessage(msg);
@@ -313,7 +335,7 @@ bool SeqDisplayPlugIn::OnCompileCommand(const char* sCommandLine) {
 	}
 
 	if (cmd == "INTERVAL RESET") {
-		ConfigurePlugin(0, nullptr);
+		ConfigurePlugin(0, nullptr, nullptr);
 		SaveDataToSettings(SETTINGS_INTERVAL, "reset refresh interval", nullptr);
 		DisplayMessage("Default refresh interval has been set!");
 		return true;
@@ -323,7 +345,7 @@ bool SeqDisplayPlugIn::OnCompileCommand(const char* sCommandLine) {
 		CString spdstr = cmd.Mid(6);
 		int spd = atoi(spdstr);
 		if (spd >= 30) {
-			ConfigurePlugin(nullptr, &spd);
+			ConfigurePlugin(nullptr, &spd, nullptr);
 			SaveDataToSettings(SETTINGS_MAX_SPEED, "custom maximum speed", spdstr);
 			msg.Format("Maximum speed has been set to %d knots!", spd);
 			DisplayMessage(msg);
@@ -332,10 +354,21 @@ bool SeqDisplayPlugIn::OnCompileCommand(const char* sCommandLine) {
 	}
 
 	if (cmd == "SPEED RESET") {
-		ConfigurePlugin(nullptr, 0);
+		ConfigurePlugin(nullptr, 0, nullptr);
 		SaveDataToSettings(SETTINGS_MAX_SPEED, "reset maximum speed", nullptr);
 		DisplayMessage("Default maximum speed has been set!");
 		return true;
 	}
+
+	if (cmd.Left(5) == "SYNC ") { // 5==strlen
+		CString method = cmd.Mid(5);
+		if (method == "SPEED" || method == "MACH" || method == "RATE" || method == "OFF") {
+			ConfigurePlugin(nullptr, nullptr, method);
+			SaveDataToSettings(SETTINGS_SYNC, "synchronizing method", method);
+			DisplayMessage("Synchronize method has been set!");
+			return true;
+		}
+	}
+
 	return false;
 }

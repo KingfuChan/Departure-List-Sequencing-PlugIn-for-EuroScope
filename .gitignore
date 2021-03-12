@@ -27,7 +27,6 @@ bld/
 [Oo]bj/
 [Ll]og/
 
-![Rr]elease/*.dll
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/
@@ -340,3 +339,4 @@ ASALocalRun/
 
 # BeatPulse healthcheck temp database
 healthchecksdb
+/EuroScopePlugIn.h

@@ -21,9 +21,6 @@
     <ClInclude Include="pch.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="E:\EuroScope\PlugInEnvironment\EuroScopePlugIn.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="resource.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -31,6 +28,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="SeqDisplayPlugIn.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="EuroScopePlugIn.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
