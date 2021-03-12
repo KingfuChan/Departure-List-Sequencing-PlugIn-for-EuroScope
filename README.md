@@ -14,10 +14,20 @@ Various configurations including color modifications can be made manually and be
 2. Modify departure list. Add the tag type called ***Ground Sequence*** and add ***GND SEQ Popup List*** to the mouse button function.
 3. To start sequecing a flight, just open the popup list and click. On each state the plugin will give respective actions to choose.
     Notice:
-    + If a flight is not yet in the sequence, nothing will show up in its tag.
-    + Sequence number may be inconsistent due to disconnections or aircrafts getting airbourne. It will correct itself within seconds (this refresh interval is customizable, 5 by default).
-    + If the ground speed of a flight is higher than 80 knots, the flight will be deleted from sequences. This GS limit is also customizable.
+   + If a flight is not yet in the sequence, nothing will show up in its tag.
+   + Sequence number may be inconsistent due to disconnections or aircrafts getting airbourne. It will correct itself within seconds (this refresh interval is customizable, 5 by default).
+   + If the ground speed of a flight is higher than 80 knots, the flight will be deleted from sequences. This GS limit is also customizable.
 4. Use command lines illustrated below to modify the plugin. When exiting ES, it will prompt you to save these settings or not.
+
+
+## Auto-Synchronization Functionality
+
+1. This function is based on the controller assigned data. The plugin writes and reads assigned data to synchronize. This also means it may make the tag somehow abnormal. So the data to assign can be selected with 3 methods. Besides, due to the format the plugin uses to store sequences, it's only possible to synchronize flight plan status instead of the sequence given by a controller.
+2. Use the command lines below to configure an automatic synchronization. ***SPEED, MACH, RATE*** refers to assign speed, assignd mach, assign vertical speed. It's suggested to fully configure this plugin before connecting, because there may be a bug where not all sequences are syncrhonized among controllers.
+3. If one controller is getting the status from another the tag item will show:
+   + **CLRN_??**, **PUSH_??**, **TKOF_??**, when it's on a ***stby*** status.
+   + **CLRN__x**, **PUSH__x**, **TKOF__x**, when it's on a ***clrd*** status.
+4. There are other features and bugs I don't have time to thoroughly explain here :)
 
 
 ## Command lines
@@ -35,4 +45,4 @@ All command lines should begin with ***.dls (followed by a space)***. Options an
 |interval reset|Resets refresh interval to default (5 seconds).|
 |speed x|Sets maximum speed to x(x>30) knots. <br>If an aircraft's ground speed is high than x, it will be removed automatically from the sequence.|
 |speed reset|Reset maximum speed to default (80 knots).|
-
+|sync speed/mach/rate/off|Sets the corresponding method of synchronization.|
