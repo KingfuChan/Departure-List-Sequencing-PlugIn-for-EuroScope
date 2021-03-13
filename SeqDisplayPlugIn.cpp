@@ -96,7 +96,7 @@ bool SeqDisplayPlugIn::ParseColorFromText(const char* text, COLORREF& color) {
 
 void SeqDisplayPlugIn::DisplayMessage(const char* msg) {
 	// unified display method with fixed parameters
-	DisplayUserMessage("Message", "DLS Plugin",
+	DisplayUserMessage("Message", "DLSPlugin",
 		msg,
 		false, true, true, false, false);
 }
